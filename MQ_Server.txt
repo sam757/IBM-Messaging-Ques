@@ -1,0 +1,105 @@
+to check version of mqserver run the command 
+1. dspmqver
+
+
+/tmp/mqconfig.1996.log //log file containing system requirements. 
+
+First thing is copy the tar.gz file to the installation directory /var/tmp
+Run the following command to unzip
+tar -xzvf IBM_MQ_9.2.0_LINUX_X86-64_TRIAL.tar.gz
+
+Check the new folder created i.e. MQServer and navigate to it
+Install all the packages using the following command 
+rpm -ivh MQSeries*.rpm
+
+Set mqm as a primary installation
+Go to this directory 
+cd /opt/mqm/bin and run the command below for a script
+
+./setmqinst -i -p  /opt/mqm
+
+dspmq //command shows all the queue managers running
+
+1. crtmqm qm1 //this will create a queue manager named qm1
+
+2. strmqm qm1 //starts the queue manager
+
+3. runmqsc queue_name //runs the queue manager so that you can define the channel and port number.
+
+2. Start the queue manager
+
+strmqm QM_TEST
+13.246.126.217
+
+
+3. Run the MQ administration tool
+
+runmqsc QM_TEST
+
+a. Define and start a listener. The default is port 1414.
+define listener(TCP.LISTENER) trptype(tcp) control(qmgr) port(1414)
+start listener(TCP.LISTENER)
+
+b. Define a channel to be used by a remote MQ Explorer
+define channel(SYSTEM.ADMIN.SVRCONN) chltype(SVRCONN) REPLACE
+
+c. For MQ 7.1 and later, and if you need to allow remote connections by an MQ Administrator.
+Note: This is too broad and it is useful for test queue managers. For production queue managers you may need to customize the remote access to MQ Administrators.
+
+set CHLAUTH(*) TYPE(BLOCKUSER) USERLIST('nobody','*MQADMIN')
+set CHLAUTH(SYSTEM.ADMIN.*) TYPE(BLOCKUSER) USERLIST('nobody')
+
+d. For MQ 8.0 and later, and if you want the password to be optional for an MQ Administrator.
+Note: This is NOT recommended for production queue managers. It might be fine for your test queue managers.
+ALTER AUTHINFO(SYSTEM.DEFAULT.AUTHINFO.IDPWOS) AUTHTYPE(IDPWOS) +
+CHCKCLNT(OPTIONAL)
+REFRESH SECURITY TYPE(CONNAUTH)
+
+5. The attribute CONTROL(QMGR) tells the QMgr to start the listener automatically when the QMgr is started and to kill the listener when the QMgr is shut down
+Once the listener is defined, you can also use START LISTENER or STOP LISTENER MQSC commands to manually start and stop it independently of the QMgr.
+
+DEF LISTENER(LISTENER.1414)  TRPTYPE(TCP) +
+    CONTROL(QMGR)            PORT(1414) +
+    REPLACE
+
+START LISTENER(LISTENER.1414)
+
+end
+
+endmqm queue_name //will stop the queue manager that is running.
+
+STOP LISTENER('SYSTEM.DEFAULT.LISTENER.TCP') IGNSTATE(YES)
+
+* Developer queues
+DEFINE QLOCAL('DEV.QUEUE.1') REPLACE
+DEFINE QLOCAL('DEV.QUEUE.2') REPLACE
+DEFINE QLOCAL('DEV.QUEUE.3') REPLACE
+DEFINE QLOCAL('DEV.DEAD.LETTER.QUEUE') REPLACE
+
+* Use a different dead letter queue, for undeliverable messages
+ALTER QMGR DEADQ('DEV.DEAD.LETTER.QUEUE')
+
+* Developer topics
+DEFINE TOPIC('DEV.BASE.TOPIC') TOPICSTR('dev/') REPLACE
+
+* Developer connection authentication
+DEFINE AUTHINFO('DEV.AUTHINFO') AUTHTYPE(IDPWOS) CHCKCLNT(REQDADM) CHCKLOCL(OPTIONAL) ADOPTCTX(YES) REPLACE
+ALTER QMGR CONNAUTH('DEV.AUTHINFO')
+REFRESH SECURITY(*) TYPE(CONNAUTH)
+
+* Developer channels (Application + Admin)
+DEFINE CHANNEL('DEV.ADMIN.SVRCONN') CHLTYPE(SVRCONN) REPLACE
+DEFINE CHLTYPE(SVRCONN) MCAUSER('mqm') REPLACE
+
+* Developer channel authentication rules
+SET CHLAUTH('*') TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(NOACCESS) DESCR('Back-stop rule - Blocks everyone') ACTION(REPLACE)
+SET CHLAUTH('DEV.APP.SVRCONN') TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(CHANNEL) CHCKCLNT(REQUIRED) DESCR('Allows connection via APP channel') ACTION(REPLACE)
+SET CHLAUTH('DEV.ADMIN.SVRCONN') TYPE(BLOCKUSER) USERLIST('nobody') DESCR('Allows admins on ADMIN channel') ACTION(REPLACE)
+SET CHLAUTH('DEV.ADMIN.SVRCONN') TYPE(USERMAP) CLNTUSER('admin') USERSRC(CHANNEL) DESCR('Allows admin user to connect via ADMIN channel') ACTION(REPLACE)
+
+* Developer listener
+DEFINE LISTENER('DEV.LISTENER.TCP') TRPTYPE(TCP) PORT(1416) CONTROL(QMGR) REPLACE
+START LISTENER('DEV.LISTENER.TCP') IGNSTATE(YES)
+
+SET AUTHREC PROFILE('SYSTEM.DEFAULT.MODEL.QUEUE') OBJTYPE(QUEUE) PRINCIPAL('mqm') AUTHADD(DSP, GET)
+
